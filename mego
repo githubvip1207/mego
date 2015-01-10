@@ -1,109 +1,135 @@
-#!/bin/bash 
+#!/bin/bash #########################################################################
+# Author: (chenyu@1207.me)
+# Created Time: 2015-01-07 02:16:16
+# File Name: mego
+# Description: 
+#########################################################################
+
+# 当您使用该工具，必须保证您的本地服务器bash在4.x以上版本，如果您是mac电脑，更新方法可以前往http://www.1207.me/archives/284.html
+
+# 配置规则
+# SERVER_CONFIGS[<SERVERNAME>]="<HOST> <PORT> <USER> <PASSWORD> <LEVEL> <PR_SERVER> <COMMAND>"
+# LEVEL: public或private，主要是管理终端是否输出密码
+# PR_SERVER: 当我们登录美国的某台服务器，但是从国内登录可能速度会很慢。此时我们就需要从国内登录一台某个高速着陆机，然后再从该机器上登录美国服务器。这个选项正式用做此，这里设置的值必须是存在与我们的配置中的某给服务器名
+# COMMAND: 登录当前服务器后需要运行的命令
+
+declare -A SERVER_CONFIGS
+SERVER_CONFIGS['11']="10.0.0.11 22 zhangsan z123456 private '' 'cd /home && ls'"
+SERVER_CONFIGS['12']="10.0.0.12 22 lisi l432145 private 12 ''"
+SERVER_CONFIGS['13']="10.0.0.13 22 wangqi w987121 public '' ''"
 
 function usage(){ 
-	echo -e "===================================================================="
-	echo -e "opgo <hostName>\n"
-	echo -e "  hostName: <11>\n"
-	echo -e "===================================================================="
+    echo -e '===================================================================='
+    echo -e 'opgo <hostName>\n'
+    echo -e '  hostName: <11>\n'
+    echo -e '===================================================================='
 }
 
-# 从json中获取指定的键值
-# 使用方法：value=$(parseJson $s "url")
-function parseJson() {
-	#echo ${1} | sed 's/.*'$2':\([^,}]*\).*/\1/'
-	echo "${1}" | sed "s/.*\"${2}\":\"\([^\"}]*\)\".*/\1/"
+# 代码执行结果状态判断
+# $1 必须是$?
+# $2 如果执行失败输出的提示信息
+function assertSuccess(){
+    if [[ ${1} -ne 0 ]]; then
+	echo "error: ${2}"; exit 1
+    fi
 }
 
-# 验证上一条执行结果是否正确
-function assertSuccess() {
-	if [[ $1 -ne 0 ]]; then
-		echo "error: ${2}"
-		exit 1
-	fi
-}
-
-function getConfigByName(){
-    case ${1} in
-    '11')
-		echo '{"Host":"192.168.1.1", "User":"chenyu", "Pass":"123456", "Port":"22", "Level":"private", "Jumpily":"", "Command":""}'
-	;;
-    '12')
-		echo '{"Host":"192.168.1.2", "User":"zhangsan", "Pass":"654321", "Port":"22", "Level":"private", "Jumpily":"12", "Command":"cd /home && ls"}'
-	;;
-    *)
-		echo "${1} not defined..."
-		exit 1
-	;;
+# 返回指定配置类型的索引id
+# $1 配置类型名
+function getParamIndexByCurKey(){
+    case "${1}" in
+	'host') _index=0;;
+	'port') _index=1;;
+	'user') _index=2;;
+	'pass') _index=3;;
+	'leve') _index=4;;
+	'jump') _index=5;;
+	'comm') _index=6;;
+	*)  exit 1;;
     esac
+    echo ${_index}
+}
+
+# (废弃)返回当前方法的第$1+1个参数的值
+# $1 需要的索引值
+# $2.. 其他参数
+function getParamByIndex(){
+    _i=$[${1} + 2]
+    if [[ ${_i} > ${#} ]];then
+	exit 1
+    fi
+    eval _val=\${${_i}}
+    echo ${_val}
+}
+
+# 返回指定服务器的指定配置属性值
+# $1 配置中的服务器名
+# $2 需要查询的配置类型名，值必须是host/port/user/pass/leve/jump/comm内
+# echo $(c 206 pass)
+function c(){
+    _confInfo=${SERVER_CONFIGS[${1}]}
+    if [ "${_confInfo}" == '' ];then
+	echo "${1} config not found..."; exit 1
+    fi
+    _index=$(getParamIndexByCurKey ${2})
+    assertSuccess $? "${2} undefined..."
+    eval _confInfoObject="(${_confInfo})"
+
+    _confVal=${_confInfoObject[${_index}]}
+    #_confVal=$(getParamByIndex ${_index} ${_confInfo})
+    assertSuccess $? "${1}->${2}(${_index}) undefined..."
+    echo ${_confVal}
+}
+
+# 返回expect运行的代码
+# $1 配置中的服务器名
+function getRoute(){
+    _firstRoute=''
+    if [ "$(c ${1} jump)" != '' ];then
+	_firstRoute=$(getRoute $(c ${1} jump))
+    fi
+
+    _command=''
+    if [ "$(c ${1} comm)" != '' ];then
+	_command="expect \"]*\"
+	send \"$(c ${1} comm)\r\"
+	"
+    fi
+
+    if [ "${_firstRoute}" == '' ];then
+	echo "
+	spawn ssh -p$(c ${1} port) $(c ${1} user)@$(c ${1} host)
+	expect \"assword:\"
+	send \"$(c ${1} pass)\r\"
+	${_command}"
+    else
+	echo "${_firstRoute}
+	expect \"]*\"
+	send \"ssh -p$(c ${1} port) $(c ${1} user)@$(c ${1} host)\r\"
+	expect \"assword:\"
+	send \"$(c ${1} pass)\r\"
+	${_command}"
+    fi
 }
 
 function main(){
-	Configs=`getConfigByName $1`
-	assertSuccess $? "[error] ${Configs}"
-	Host=$(parseJson "${Configs}" "Host")
-	User=$(parseJson "${Configs}" "User")
-	Pass=$(parseJson "${Configs}" "Pass")
-	Port=$(parseJson "${Configs}" "Port")
-	Level=$(parseJson "${Configs}" "Level")
-	Jumpily=$(parseJson "${Configs}" "Jumpily")
-	Command=$(parseJson "${Configs}" "Command")
+    if [ $(c ${1} leve) == 'public' ];then
+	echo "--- ssh -p$(c ${1} port) $(c ${1} user)@$(c ${1} host) $(c ${1} pass) ---"
+    else
+	echo "--- ssh -p$(c ${1} port) $(c ${1} user)@$(c ${1} host) ---"
+    fi
 
-	# 判断安全级别
-	if [ "${Level}" = "public" ]; then
-		Spass=${Pass}
-	elif [ "${Level}" = "private" ]; then
-		Spass=''
-	fi
-
-    echo "--- ssh -p${Port} ${User}@${Host} ${Spass} ---"
-	# 在base中使用expect有两种方法，一种如下，该方法运行结束后会退到当前机器
-	#expect <<- FINISH
-	#	...
-	#FINISH
-	# 一种方法如本工具所用，运行结束后继续保持在目标机器上，当然，最后的interact功不可没
-	#expect -c ".. interact"
-	if [ "${Jumpily}" != "" ]; then
-		JumpilyConfigs=`getConfigByName ${Jumpily}`
-		assertSuccess $? "[error] ${JumpilyConfigs}"
-		JumpilyHost=$(parseJson "${JumpilyConfigs}" "Host")
-		JumpilyUser=$(parseJson "${JumpilyConfigs}" "User")
-		JumpilyPass=$(parseJson "${JumpilyConfigs}" "Pass")
-		JumpilyPort=$(parseJson "${JumpilyConfigs}" "Port")
-		JumpilyExpectString="
-			spawn ssh -p${JumpilyPort} ${JumpilyUser}@${JumpilyHost} 
-			expect \"assword:\"
-			send \"${JumpilyPass}\r\"
-			expect \"]*\"
-		"
-		spawnString="send \"ssh -p${Port} ${User}@${Host}\r\""
-	else
-		JumpilyExpectString=""
-		spawnString="spawn ssh -p${Port} ${User}@${Host}"
-	fi
-
-	# 判断是否有设定的命令
-	if [ "${Command}" != "" ]; then
-		CommandString="
-			expect \"]*\"
-			send \"${Command}\r\"
-		"
-	fi
-
-	expect -c "
+    expect -c "
 	set timeout 30
-	${JumpilyExpectString}
-	${spawnString}
-	expect \"assword:\"
-	send \"${Pass}\r\"
-	${CommandString}
+	$(getRoute $1)
 	interact"
 }
 
 case $# in
 "1")
-    main $1
-    ;;
+    main $1;;
 *)
-    usage
-    ;;
+    usage;;
 esac
+
+# vim: set noexpandtab ts=4 sts=4 sw=4 :
