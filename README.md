@@ -5,7 +5,7 @@ mego主要针对ssh做了进一步封装，免除咱们登录远程服务器记�
 ## 使用方法 ##
  * Usage: bash mego <server name>
  * Param:
-  * server name: 远程服务器名，根据您的配置来决定
+  ** server name: 远程服务器名，根据您的配置来决定
  * Example:
   * bash mego 11
 
