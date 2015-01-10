@@ -7,9 +7,7 @@ mego主要针对ssh做了进一步封装，免除咱们登录远程服务器记�
  - Param:
    - server name: 远程服务器名，根据您的配置来决定
  - Example:
-~~~
    - bash mego 11
-~~~
 
 ## 环境要求
  - 您的本地服务器必须拥有bash 4.x以上版本
