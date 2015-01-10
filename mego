@@ -1,0 +1,109 @@
+#!/bin/bash 
+
+function usage(){ 
+	echo -e "===================================================================="
+	echo -e "opgo <hostName>\n"
+	echo -e "  hostName: <11>\n"
+	echo -e "===================================================================="
+}
+
+# 从json中获取指定的键值
+# 使用方法：value=$(parseJson $s "url")
+function parseJson() {
+	#echo ${1} | sed 's/.*'$2':\([^,}]*\).*/\1/'
+	echo "${1}" | sed "s/.*\"${2}\":\"\([^\"}]*\)\".*/\1/"
+}
+
+# 验证上一条执行结果是否正确
+function assertSuccess() {
+	if [[ $1 -ne 0 ]]; then
+		echo "error: ${2}"
+		exit 1
+	fi
+}
+
+function getConfigByName(){
+    case ${1} in
+    '11')
+		echo '{"Host":"192.168.1.1", "User":"chenyu", "Pass":"123456", "Port":"22", "Level":"private", "Jumpily":"", "Command":""}'
+	;;
+    '12')
+		echo '{"Host":"192.168.1.2", "User":"zhangsan", "Pass":"654321", "Port":"22", "Level":"private", "Jumpily":"12", "Command":"cd /home && ls"}'
+	;;
+    *)
+		echo "${1} not defined..."
+		exit 1
+	;;
+    esac
+}
+
+function main(){
+	Configs=`getConfigByName $1`
+	assertSuccess $? "[error] ${Configs}"
+	Host=$(parseJson "${Configs}" "Host")
+	User=$(parseJson "${Configs}" "User")
+	Pass=$(parseJson "${Configs}" "Pass")
+	Port=$(parseJson "${Configs}" "Port")
+	Level=$(parseJson "${Configs}" "Level")
+	Jumpily=$(parseJson "${Configs}" "Jumpily")
+	Command=$(parseJson "${Configs}" "Command")
+
+	# 判断安全级别
+	if [ "${Level}" = "public" ]; then
+		Spass=${Pass}
+	elif [ "${Level}" = "private" ]; then
+		Spass=''
+	fi
+
+    echo "--- ssh -p${Port} ${User}@${Host} ${Spass} ---"
+	# 在base中使用expect有两种方法，一种如下，该方法运行结束后会退到当前机器
+	#expect <<- FINISH
+	#	...
+	#FINISH
+	# 一种方法如本工具所用，运行结束后继续保持在目标机器上，当然，最后的interact功不可没
+	#expect -c ".. interact"
+	if [ "${Jumpily}" != "" ]; then
+		JumpilyConfigs=`getConfigByName ${Jumpily}`
+		assertSuccess $? "[error] ${JumpilyConfigs}"
+		JumpilyHost=$(parseJson "${JumpilyConfigs}" "Host")
+		JumpilyUser=$(parseJson "${JumpilyConfigs}" "User")
+		JumpilyPass=$(parseJson "${JumpilyConfigs}" "Pass")
+		JumpilyPort=$(parseJson "${JumpilyConfigs}" "Port")
+		JumpilyExpectString="
+			spawn ssh -p${JumpilyPort} ${JumpilyUser}@${JumpilyHost} 
+			expect \"assword:\"
+			send \"${JumpilyPass}\r\"
+			expect \"]*\"
+		"
+		spawnString="send \"ssh -p${Port} ${User}@${Host}\r\""
+	else
+		JumpilyExpectString=""
+		spawnString="spawn ssh -p${Port} ${User}@${Host}"
+	fi
+
+	# 判断是否有设定的命令
+	if [ "${Command}" != "" ]; then
+		CommandString="
+			expect \"]*\"
+			send \"${Command}\r\"
+		"
+	fi
+
+	expect -c "
+	set timeout 30
+	${JumpilyExpectString}
+	${spawnString}
+	expect \"assword:\"
+	send \"${Pass}\r\"
+	${CommandString}
+	interact"
+}
+
+case $# in
+"1")
+    main $1
+    ;;
+*)
+    usage
+    ;;
+esac
