@@ -65,7 +65,7 @@ function getParamByIndex(){
 
 # 返回指定服务器的指定配置属性值
 # $1 配置中的服务器名
-# $2 需要查询的配置类型名，值必须是host/port/user/pass/leve/jump/comm内
+# $2 需要查询的配置类型名，取值范围host/port/user/pass/leve/jump/comm
 # echo $(c 206 pass)
 function c(){
     _confInfo=${SERVER_CONFIGS[${1}]}
