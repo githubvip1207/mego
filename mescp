@@ -1,8 +1,8 @@
 #!/bin/bash 
 #########################################################################
 # Author: (chenyu@1207.me)
-# Created Time: 2015-01-07 02:16:16
-# File Name: mego
+# Created Time: 2015-01-10 02:16:16
+# File Name: mescp
 # Description: 
 #########################################################################
 
@@ -21,8 +21,10 @@ SERVER_CONFIGS['13']="10.0.0.13 22 wangqi w987121 public '' ''"
 
 function usage(){ 
 	echo -e '===================================================================='
-	echo -e 'mego <hostName>\n'
-	echo -e '  hostName: <11>\n'
+	echo -e 'mescp <hostName> <localFile> <remoteFile>\n'
+	echo -e '  hostName	: <11>'
+	echo -e '  localFile	: </tmp/file1.out>'
+	echo -e '  remoteFile	: </tmp/file2.out>'
 	echo -e '===================================================================='
 }
 
@@ -87,8 +89,10 @@ function c(){
 # $1 配置中的服务器名
 function getRoute(){
 	_firstRoute=''
-	if [ "$(c ${1} jump)" != '' ];then
-		_firstRoute=$(getRoute $(c ${1} jump))
+	if [ "$(c ${1} jump)" != '' ] && [ "${4}" == '' ];then
+		_firstRoute=$(getRoute $(c ${1} jump) $2 $3 'inc')
+	elif [ "$(c ${1} jump)" != '' ];then
+		_firstRoute=$(getRoute $(c ${1} jump) $2 $3)
 	fi
 
 	_command=''
@@ -103,11 +107,41 @@ function getRoute(){
 		spawn ssh -o StrictHostKeyChecking=no -p$(c ${1} port) $(c ${1} user)@$(c ${1} host)
 		expect \"assword:\"
 		send \"$(c ${1} pass)\r\"
+		expect \"]*\"
+		send \"mkdir -p ~/.tmp && exit\r\"
+		expect eof
+
+		spawn scp -o StrictHostKeyChecking=no -r -P$(c ${1} port) ${2} $(c ${1} user)@$(c ${1} host):~/.tmp/
+		expect \"assword:\"
+		send \"$(c ${1} pass)\r\"
+		expect eof
+
+		spawn ssh -o StrictHostKeyChecking=no -p$(c ${1} port) $(c ${1} user)@$(c ${1} host)
+		expect \"assword:\"
+		send \"$(c ${1} pass)\r\"
+		${_command}"
+	elif [ "${4}" == 'inc' ];then
+		echo "${_firstRoute}
+		expect \"]*\"
+		send \"ssh -o StrictHostKeyChecking=no -p$(c ${1} port) $(c ${1} user)@$(c ${1} host)\r\"
+		expect \"assword:\"
+		send \"$(c ${1} pass)\r\"
+		expect \"]*\"
+		send \"mkdir -p ~/.tmp && exit\r\"
+
+		expect \"]*\"
+		send \"scp -o StrictHostKeyChecking=no -r -P$(c ${1} port) ~/.tmp/${2} $(c ${1} user)@$(c ${1} host):~/.tmp/\r\"
+		expect \"assword:\"
+		send \"$(c ${1} pass)\r\"
+
+		send \"ssh -o StrictHostKeyChecking=no -p$(c ${1} port) $(c ${1} user)@$(c ${1} host)\r\"
+		expect \"assword:\"
+		send \"$(c ${1} pass)\r\"
 		${_command}"
 	else
 		echo "${_firstRoute}
 		expect \"]*\"
-		send \"ssh -o StrictHostKeyChecking=no -p$(c ${1} port) $(c ${1} user)@$(c ${1} host)\r\"
+		send \"scp -o StrictHostKeyChecking=no -r -p$(c ${1} port) ~/.tmp/${2} $(c ${1} user)@$(c ${1} host):${3}\r\"
 		expect \"assword:\"
 		send \"$(c ${1} pass)\r\"
 		${_command}"
@@ -116,20 +150,20 @@ function getRoute(){
 
 function main(){
 	if [ $(c ${1} leve) == 'public' ];then
-		echo "--- ssh -p$(c ${1} port) $(c ${1} user)@$(c ${1} host) $(c ${1} pass) ---"
+		echo "--- scp -r -p$(c ${1} port) ${2} $(c ${1} user)@$(c ${1} host) $(c ${1} pass):${3} ---"
 	else
-		echo "--- ssh -p$(c ${1} port) $(c ${1} user)@$(c ${1} host) ---"
+		echo "--- scp -r -p$(c ${1} port) ${2} $(c ${1} user)@$(c ${1} host):${3} ---"
 	fi
 
 	expect -c "
 		set timeout 30
-		$(getRoute $1)
+		$(getRoute $1 $2 $3)
 		interact"
 }
 
 case $# in
-"1")
-	main $1;;
+"3")
+	main $1 $2 $3;;
 *)
 	usage;;
 esac
