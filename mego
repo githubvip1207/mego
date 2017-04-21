@@ -11,7 +11,7 @@
 # 配置规则
 # SERVER_CONFIGS[<SERVERNAME>]="<HOST> <PORT> <USER> <PASSWORD> <LEVEL> <PR_SERVER> <COMMAND>"
 # LEVEL: public或private，主要是管理终端是否输出密码
-# PR_SERVER: 当我们登录美国的某台服务器，但是从国内登录可能速度会很慢。此时我们就需要从国内登录一台某个高速着陆机，然后再从该机器上登录美国服务器。这个选项正式用做此，这里设置的值必须是存在与我们的配置中的某给服务器名
+# PR_SERVER: 工作中，生产环境的服务器集群一般是不可用直接ssh登录的，都需要通过一台唯一入口（跳板机）进行访问。该选项是配置登录该服务器需要通过的跳板机ServerName
 # COMMAND: 登录当前服务器后需要运行的命令
 
 declare -A SERVER_CONFIGS
@@ -21,8 +21,12 @@ SERVER_CONFIGS['13']="10.0.0.13 22 wangqi w987121 public '' ''"
 
 function usage(){ 
 	echo -e '===================================================================='
-	echo -e 'mego <hostName>\n'
-	echo -e '  hostName: <11>\n'
+	echo -e 'Usage:'
+	echo -e '  opgo [Options] <ServerName>\n'
+	echo -e 'Params:'
+	echo -e '  <ServerName>		e.g. 11\n'
+	echo -e 'Options:'
+	echo -e '  -s			show the configuration for the <ServerName>'
 	echo -e '===================================================================='
 }
 
@@ -71,7 +75,7 @@ function getParamByIndex(){
 function c(){
 	_confInfo=${SERVER_CONFIGS[${1}]}
 	if [ "${_confInfo}" == '' ];then
-		echo "${1} config not found..."; exit 1
+		echo "ServerName[${1}] config is not found..."; exit 1
 	fi
 	_index=$(getParamIndexByCurKey ${2})
 	assertSuccess $? "${2} undefined..."
@@ -115,23 +119,44 @@ function getRoute(){
 }
 
 function main(){
-	if [ $(c ${1} leve) == 'public' ];then
+	level="$(c ${1} leve)"
+	assertSuccess $? "$level"
+
+	if [ "$2" == 'true' ]; then
+		level='public'
+	fi
+
+	if [ "$level" == 'public' ];then
 		echo "--- ssh -p$(c ${1} port) $(c ${1} user)@$(c ${1} host) $(c ${1} pass) ---"
-	else
+	elif [ "$level" == 'private' ];then
 		echo "--- ssh -p$(c ${1} port) $(c ${1} user)@$(c ${1} host) ---"
 	fi
 
-	expect -c "
-		set timeout 30
-		$(getRoute $1)
-		interact"
+	if [ "$2" == 'false' ]; then
+		expect -c "
+			set timeout 30
+			$(getRoute $1)
+			interact"
+	fi
 }
 
-case $# in
-"1")
-	main $1;;
-*)
-	usage;;
-esac
+if [ $# == 0 ]; then
+	usage
+else
+	show=false
+	sname=''
+	while [ $# != 0 ]; do
+		case $1 in
+			-s) shift; show=true;;
+			 *) sname=$1; shift;;
+		esac
+	done
+	
+	if [ ! -n "$sname" ]; then
+		echo "<ServerName> is empty!"; exit 1;
+	fi
+	main $sname $show
+fi
+
 
 # vim: set noexpandtab ts=4 sts=4 sw=4 :

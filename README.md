@@ -4,11 +4,14 @@
 mego主要针对ssh做了进一步封装，免除咱们登录远程服务器记不住密码的尴尬，免除登录远程服务器从着陆机上穿越的麻烦。
 
 ## 使用方法
- - Usage: bash mego <server name>
- - Param:
+ - Usage: bash mego [Options] <server name>
+ - Params:
    - server name: 远程服务器名，根据您的配置来决定
+ - Options:
+   - -s: 显示配置信息，不进行登录 
  - Example:
    - bash mego 11
+   - bash mego -s 11
 
 ## 环境要求
  - 您的本地服务器必须拥有bash 4.x以上版本
